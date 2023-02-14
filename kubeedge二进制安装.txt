@@ -1,0 +1,81 @@
+本文用于记录本人学习kubernetes的记录
+####################
+废弃，跑不起来
+####################
+基于项目需要，这里使用源码编译安装kubeedge
+root用户
+
+云侧，master：
+准备环境：
+#apt-get install build-essential golang
+#git clone https://github.com/kubeedge/kubeedge
+#cd kubeedge
+
+编译：
+#make all WHAT=cloudcore
+#mkdir ~/cloudcore/
+#cp _output/local/bin/cloudcore ~/cloudcore/
+
+创建CRD：
+#cd ~/kubeedge/build/crds/devices
+#kubectl create -f devices_v1alpha2_device.yaml
+#kubectl create -f devices_v1alpha2_devicemodel.yaml
+#cd ~/kubeedge/build/crds/reliablesyncs
+#kubectl create -f cluster_objectsync_v1alpha1.yaml
+#kubectl create -f objectsync_v1alpha1.yaml
+
+配置：
+#mkdir -p /etc/kubeedge/config/
+#cd /etc/kubeedge/config/
+#~/cloudcore/cloudcore --defaultconfig > /etc/kubeedge/config/cloudcore.yaml
+#vim /etc/kubeedge/config/cloudcore.yaml
+kubeAPIConfig.kubeConfig: 修改为~/.kube/config即k8s配置文件
+并确保的advertiseaddress为master本机ip
+
+#####~/cloudcore/cloudcore --config cloudcore.yaml
+
+#nohup ./cloudcore > cloudcore.log 2>&1 &
+#kubectl get secret tokensecret -n kubeedge -oyaml|grep tokendata
+会得到一长串token，用它替换下方的##########
+#echo ########## | base64 -d
+又得到一长串字符，这是edge链接cloud用的token，替换下方***************处
+
+
+
+
+边侧，edge：
+#swapoff -a
+#vim /etc/fstab
+注释掉swap所在行
+#apt-get update
+#apt-get -y install apt-transport-https ca-certificates curl software-properties-common net-tools vim build-essential golang
+#curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg | sudo apt-key add -
+#add-apt-repository "deb [arch=amd64] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(lsb_release -cs) stable"
+#apt-get -y update
+#apt-get -y install docker-ce
+然后修改cgroupdriver为systemd
+#vim /etc/docker/daemon.json
+输入以下内容
+{
+	"exec-opts":["native.cgroupdriver=systemd"]
+}
+
+
+#git clone https://github.com/kubeedge/kubeedge
+#cd kubeedge
+#make all WHAT=edgecore
+#mkdir ~/edgecore/
+#cp _output/local/bin/edgecore ~/edgecore/
+#mkdir -p /etc/kubeedge/config/
+#cd /etc/kubeedge/config/
+#~/edgecore/edgecore --defaultconfig > /etc/kubeedge/config/edgecore.yaml
+#vim /etc/kubeedge/config/edgecore.yaml
+其中分别将
+modules.edgehub.httpServer: 修改为https://云侧master的ip:10002
+modules.edgehub.quic.server: 修改为云侧master的ip:10001
+modules.edgehub.websocket.server: 修改为云侧master的ip:10000
+modules.edgeHub.token: 修改为**************，不带引号
+cgruopDriver:修改为systemd
+保存退出
+#~/edgecore/edgecore --config  /etc/kubeedge/config/edgecore.yaml
+#nohup ./edgecore > edgecore.log 2>&1 &

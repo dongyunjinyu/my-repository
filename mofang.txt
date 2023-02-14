@@ -1,0 +1,208 @@
+2. 部署业务应用
+
+    执行如下命令，创建名为app-ns的命名空间。 
+
+说明：通常创建应用需要确定部署在k8s的哪个namespace中，一般不建议部署在default namespace下，索引我们创建名为app-ns的命名空间。
+
+kubectl create ns app-ns
+
+    执行如下命令，创建deploy.yaml文件。
+
+说明：现在我们需要将业务应用部署到k8s集群中，这里我们已经准备好了一个应用并打包成镜像，镜像地址如下：
+
+仓库地址：registry.cn-hangzhou.aliyuncs.com/acr-toolkit/ack-cube。
+
+版本： 1.0。
+
+这是一个示例性质的魔方游戏应用。这个应用会监听80端口，接受根路径的访问，返回一个简单的魔方游戏界面。要让这个web应用的镜像在k8s中运行，我们首先要定义一个 deployment资源然后，通过创建deploy.yaml来描述deployment资源。
+
+vim deploy.yaml
+
+    按i键进入编辑模式，将如下代码复制到文件中，然后按ECS退出编辑模式，输入:wq后按下Enter键保存并退出。
+
+参数说明：
+
+    image：就是这个web应用的镜像地址。
+    replicas：代表这个应用只部署一份。
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-deployment
+  namespace: app-ns
+  labels:
+    app: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: myapp
+  template:
+    metadata:
+      labels:
+        name: myapp
+      namespace: app-ns
+    spec:
+      containers:
+        - name: ack-kube
+          image: registry.cn-hangzhou.aliyuncs.com/acr-toolkit/ack-cube:1.0
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 0.25
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1024Mi
+
+    执行如下命令，运行deploy.yaml文件，部署应用。
+
+kubectl apply -f ~/deploy.yaml
+
+    执行如下命令，查看部署的POD。
+
+kubectl get pod -n app-ns
+
+返回结果如下，当您看到status字段为Running时，代表应用部署完成，处于运行中的状态。如果您看到的是ContainerCreating，代表服务容器正在创建中，需要您耐心等待应用创建完成。
+NAME                               READY   STATUS    RESTARTS   AGE
+myapp-deployment-664db6bcc-plqjl   1/1     Running   0          23m
+
+至此，我们已经完成了应用本身的部署，下面我们看下如何在k8s里配置服务。
+
+
+
+
+
+
+
+3. 部署服务
+
+由于deployment是一个弹性组件，其管理的应用实例不是固定的，而是可以任意伸缩。这带来了很多的好处，例如可以支持弹性伸缩、滚动更新等等。但是相反的，这也会导致应用实例IP不固定，从访问者的角度我们不可能每次去查找当前的应用实例。所以，为了能提供稳定的访问入口，我们还需要部署服务来接收请求，并屏蔽内部的弹性机制。
+
+本步骤将指导您如何部署服务。
+
+    执行如下命令，创建service.yaml文件。 
+
+vim service.yaml
+
+    按i键进入编辑模式，将如下代码复制到文件中，然后按ECS退出编辑模式，输入:wq后按下Enter键保存并退出。
+
+参数说明：
+
+    selector：这是一个选择器，通过name=myapp这个条件来选择需要代理的Pod。
+    ports：这里定义了服务自身暴露的端口和需要访问的应用的端口。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+  namespace: app-ns
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
+  selector:
+    name: myapp
+
+    执行如下命令，运行service.yaml文件，部署服务service。
+
+kubectl apply -f ~/service.yaml
+
+    执行如下命令，查看部署的服务service。
+
+kubectl get service -n app-ns
+
+返回结果如下，您可查看到服务service的相关信息。
+
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+myapp-service   ClusterIP   192.168.26.7   <none>        80/TCP    21m
+
+这里我们就完成了服务的部署。下面我们通过ingress将内部的服务暴露出去。
+
+
+
+
+
+4. 配置ingress开放外部访问
+
+k8s是一个集群，deployment、service都是集群内部的资源，他们通过一个内部虚拟网络互相访问。但是对于外部的用户，这些所有的资源都是不可见的，所以我们还需要配置一个外部访问的入口到service的映射规则，从而将内部服务暴露出去。
+
+本步骤将指导您如何使用ingress的来实现服务对外暴露的需求。
+
+    执行如下命令，创建ingress.yaml文件。
+
+vim ingress.yaml
+
+    按i键进入编辑模式，将如下代码复制到文件中，定义ingress规则，然后按ECS退出编辑模式，输入:wq后按下Enter键保存并退出。
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ingress
+  namespace: app-ns
+spec:
+  ingressClassName: nginx #default ingress class. optional
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: myapp-service
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+
+    执行如下命令，运行ingress.yaml文件，部署ingress。
+
+kubectl apply -f ~/ingress.yaml
+
+    执行如下命令，查看部署的ingress。
+
+kubectl get ingress -n app-ns
+
+返回结果如下，您可查看到访问地址的IP，以及端口是80。如果您的返回结果中ADDRESS为空，表示ingress正在部署，请您稍等片刻，再次执行上述命令。
+
+NAME              CLASS   HOSTS   ADDRESS         PORTS   AGE
+example-ingress   nginx   *       106.15.136.31   80      20m
+
+    在您的本机浏览器中，打开新页签，在地址栏中访问http://ADDRESS:80。
+
+说明：您需要将ADDRESS改为上一步骤的命令返回结果中的ADDRESS。
+
+
+
+
+
+5. 卸载资源
+
+进行配置并提供服务只完成了一半的工作，完整的操作周期除了正向的安装，还包含了逆向的卸载。
+
+本步骤将指导您如何把配置的各种资源给卸载掉。
+
+说明：资源卸载我们就不使用yaml脚本了，直接使用kubectl命令就可以完成。
+
+    执行如下命令，卸载ingress。
+
+kubectl delete ingress example-ingress -n app-ns
+
+    执行如下命令，卸载service。
+
+kubectl delete service myapp-service -n app-ns
+
+    执行如下命令，卸载deployment。
+
+kubectl delete deployment myapp-deployment -n app-ns
+
+    至此我们就完成了卸载工作，现在我们需要确认卸载结果。依次执行如下命令，确认卸载结果。
+
+kubectl get deployment -n app-ns
+kubectl get service -n app-ns
+kubectl get ingress -n app-ns
+
+返回结果如下，表示卸载工作已完成。如果您的返回结果和如下截图不一样，并且您的返回结果中STATUS字段为Terminating，表示pod正在卸载中，请您稍等片刻，再次执行上述命令，确认卸载结果。
+
+No resources found in app-ns namespace.

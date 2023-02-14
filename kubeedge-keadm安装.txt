@@ -1,0 +1,18 @@
+使用keadm方式部署kubeedge集群，不需要管理token
+使用1.12.1版本因为1.13.0版本不支持docker
+云端：
+#wget https://github.com/kubeedge/kubeedge/releases/download/v1.12.1/keadm-v1.12.1-linux-amd64.tar.gz
+#tar -xvf keadm-v1.12.1-linux-amd64.tar.gz 
+进入到keadm目录内，确保能运行keadm命令
+先看本机的k8s配置文件(.kube/config)放在哪个用户目录下，如果是root：
+#./keadm init --advertise-address=【本机ip】
+如果是一般用户：
+#./keadm init --advertise-address=【本机ip --kube-config=【k8s配置文件绝对路径】
+
+
+边端：
+#wget https://github.com/kubeedge/kubeedge/releases/download/v1.12.1/keadm-v1.12.1-linux-amd64.tar.gz
+#tar -xvf keadm-v1.12.1-linux-amd64.tar.gz
+进入到keadm目录内，确保能运行keadm命令
+如果k8s配置文件不在root目录内，下面的命令要像云端那样指定路径
+#keadm join --cloudcore-ipport=【云端ip】:10000 --edgenode-name=【自定义名字】

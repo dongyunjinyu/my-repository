@@ -1,0 +1,363 @@
+本文用于记录本人学习kubernetes的记录
+
+使用kubernetes UI——dashboard on web
+
+#vim recommended.yaml
+输入：
+# Copyright 2017 The Kubernetes Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubernetes-dashboard
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  type: NodePort
+  ports:
+    - port: 443
+      targetPort: 8443
+  selector:
+    k8s-app: kubernetes-dashboard
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard-certs
+  namespace: kubernetes-dashboard
+type: Opaque
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard-csrf
+  namespace: kubernetes-dashboard
+type: Opaque
+data:
+  csrf: ""
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard-key-holder
+  namespace: kubernetes-dashboard
+type: Opaque
+
+---
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard-settings
+  namespace: kubernetes-dashboard
+
+---
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+rules:
+  # Allow Dashboard to get, update and delete Dashboard exclusive secrets.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["kubernetes-dashboard-key-holder", "kubernetes-dashboard-certs", "kubernetes-dashboard-csrf"]
+    verbs: ["get", "update", "delete"]
+    # Allow Dashboard to get and update 'kubernetes-dashboard-settings' config map.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["kubernetes-dashboard-settings"]
+    verbs: ["get", "update"]
+    # Allow Dashboard to get metrics.
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["heapster", "dashboard-metrics-scraper"]
+    verbs: ["proxy"]
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    resourceNames: ["heapster", "http:heapster:", "https:heapster:", "dashboard-metrics-scraper", "http:dashboard-metrics-scraper"]
+    verbs: ["get"]
+
+---
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+rules:
+  # Allow Metrics Scraper to get metrics from the Metrics server
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubernetes-dashboard
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-dashboard
+    namespace: kubernetes-dashboard
+
+---
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-dashboard
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-dashboard
+    namespace: kubernetes-dashboard
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kubernetes-dashboard
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s-app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        k8s-app: kubernetes-dashboard
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kubernetes-dashboard
+          image: kubernetesui/dashboard:v2.6.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+          args:
+            - --auto-generate-certificates
+            - --namespace=kubernetes-dashboard
+            # Uncomment the following line to manually specify Kubernetes API server Host
+            # If not specified, Dashboard will attempt to auto discover the API server and connect
+            # to it. Uncomment only if the default does not work.
+            # - --apiserver-host=http://my-address:port
+          volumeMounts:
+            - name: kubernetes-dashboard-certs
+              mountPath: /certs
+              # Create on-disk volume to store exec logs
+            - mountPath: /tmp
+              name: tmp-volume
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /
+              port: 8443
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 1001
+            runAsGroup: 2001
+      volumes:
+        - name: kubernetes-dashboard-certs
+          secret:
+            secretName: kubernetes-dashboard-certs
+        - name: tmp-volume
+          emptyDir: {}
+      serviceAccountName: kubernetes-dashboard
+      nodeSelector:
+        "kubernetes.io/os": linux
+      # Comment the following tolerations if Dashboard must not be deployed on master
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+
+---
+
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    k8s-app: dashboard-metrics-scraper
+  name: dashboard-metrics-scraper
+  namespace: kubernetes-dashboard
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    k8s-app: dashboard-metrics-scraper
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  labels:
+    k8s-app: dashboard-metrics-scraper
+  name: dashboard-metrics-scraper
+  namespace: kubernetes-dashboard
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s-app: dashboard-metrics-scraper
+  template:
+    metadata:
+      labels:
+        k8s-app: dashboard-metrics-scraper
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dashboard-metrics-scraper
+          image: kubernetesui/metrics-scraper:v1.0.8
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /
+              port: 8000
+            initialDelaySeconds: 30
+            timeoutSeconds: 30
+          volumeMounts:
+          - mountPath: /tmp
+            name: tmp-volume
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 1001
+            runAsGroup: 2001
+      serviceAccountName: kubernetes-dashboard
+      nodeSelector:
+        "kubernetes.io/os": linux
+      # Comment the following tolerations if Dashboard must not be deployed on master
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+
+
+
+#kubectl apply -f recommended.yaml
+#kubectl get pods,svc -n kubernetes-dashboard -o wide
+等待所有pod加载完毕，为运行状态
+返回如下
+
+NAME                                             READY   STATUS    RESTARTS   AGE   IP           NODE    NOMINATED NODE   READINESS GATES
+pod/dashboard-metrics-scraper-7c857855d9-bsmxl   1/1     Running   0          44m   10.244.2.2   node3   <none>           <none>
+pod/kubernetes-dashboard-6b79449649-7q575        1/1     Running   0          44m   10.244.1.2   node1   <none>           <none>
+
+NAME                                TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE   SELECTOR
+service/dashboard-metrics-scraper   ClusterIP   10.140.17.78   <none>        8000/TCP        44m   k8s-app=dashboard-metrics-scraper
+service/kubernetes-dashboard        NodePort    10.140.86.35   <none>        443:3033/TCP   44m   k8s-app=kubernetes-dashboard
+
+可以看到，dashboard的pod被分配到了我的两个node上，在任一个被分配的node节点上用ifconfig命令查看ip；再注意 443:3033/TCP ，3033就是端口号。这时打开浏览器，输入https://ip:端口号
+就可以进去了，提示隐私，选择高级，直接进入，使用token登录
+下面获取token
+先在master节点创建并绑定k8s用户，
+#vim admin-user.yaml
+输入：
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kube-system
+
+#kubectl create -f admin-user.yaml
+
+#vim admin-user-role-binding.yaml
+输入：
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kube-system
+
+#kubectl create -f  admin-user-role-binding.yaml
+#kubectl -n kube-system get secret|grep admin-user
+根据输出结果找到 admin-user 对应的 token，一般五个字符，比如我的就是：admin-user-token-qvx8v，那么qvx8v就是，用qvx8v替换下面命令中的#####
+#kubectl -n kube-system describe secret admin-user-token-#####
+此时token：后的一大堆就是token，注意不要把ca.crt:     1099 bytes复制上了，复制token，到浏览器，然后登录即可
