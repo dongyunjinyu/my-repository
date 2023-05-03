@@ -1,0 +1,68 @@
+记录苏州大学工业互联网全要素互联与协作项目AI微服务部署部分学习过程，以下为本人在本机上部署yolov5的过程
+
+一、环境配置
+去anaconda官网下载linux版本，版本3,到work目录
+在work目录，bash ./*.sh
+路径选择/media/shx/writable/work/anaconda3
+使用source ~/.bashrc更新环境变量，使用conda命令检测conda安装成功，若没成功则在 ~/.bashrc中添加export PATH=/media/shx/writable/work/anaconda3/bin:$PATH
+添加国内镜像源：
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/
+conda config --add channels http://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/
+conda config --set show_channel_urls yes
+创建虚拟环境：
+conda create -n myenv python=3.8
+conda activate myenv
+conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+编辑~/.bashrc添加
+alias python='/media/shx/writable/work/anaconda3/envs/myenv/bin/python3.8'
+然后source ~/.bashrc
+conda activate myenv
+
+二、部署YOLOv5
+git clone https://github.com/ultralytics/yolov5
+报错error: RPC 失败。curl 16 Error in the HTTP2 framing layer;fatal: 在引用列表之后应该有一个 flush 包
+执行git config --global http.version HTTP/1.1修复成功
+安装所需库：
+pip install -r requirements.txt -i http://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com
+下载权重文件(download_weights.sh)：
+bash ./data/scripts/download_weights.sh
+下载COCO分割数据集（不下载也可，训练时会自动下载）：
+bash ./data/scripts/get_coco128.sh
+下载COCO验证集(get_coco.sh)：
+bash ./data/scripts/get_coco.sh --val --segments
+检测：
+python ./segment/predict.py --weights ./weights/yolov5x-seg.pt --data data/images/
+输出在./runs/中
+
+三、训练
+单GPU：
+python segment/train.py --model ./weights/yolov5s-seg.pt --data coco128-seg.yaml --epochs 5 --img 640
+多GPu：
+python -m torch.distributed.run --nproc_per_node 4 --master_port 1 segment/train.py --model yolov5s-seg.pt --data coco128-seg.yaml --epochs 5 --img 640 --device 0,1,2,3
+
+验证：
+python segment/val.py --weights ./weights/yolov5s-seg.pt --data coco.yaml --img 640
+
+预测：
+python segment/predict.py --weights ./weights/yolov5m-seg.pt --data data/images/bus.jpg
+model = torch.hub.load('ultralytics/yolov5', 'custom', 'yolov5m-seg.pt')
+
+推理：
+python detect.py --weights weights/yolov5s.pt --source 0                               # webcam
+                                                     img.jpg                         # image
+                                                     vid.mp4                         # video
+                                                     screen                          # screenshot
+                                                     path/                           # directory
+                                                     list.txt                        # list of images
+                                                     list.streams                    # list of streams
+                                                     'path/*.jpg'                    # glob
+                                                     'https://youtu.be/Zgi9g1ksQHc'  # YouTube
+                                                     'rtsp://example.com/media.mp4'  # RTSP, RTMP, HTTP stream
+
+
+
+
+
+
