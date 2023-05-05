@@ -6,6 +6,7 @@
 
 yolov8的部署十分简便：
 pip install ultralytics
+源码储存在work/anaconda3/envs/myenv/lib/python3.8/site-packages/ultralytics/
 
 然后就可以运行，只不过需要的文件会现场下载：
 yolo predict model=yolov8n.pt source='https://ultralytics.com/images/bus.jpg'
@@ -14,9 +15,13 @@ yolov8也可以直接在python文件中使用：
 from ultralytics import YOLO
 # 加载模型
 model = YOLO("yolov8n.yaml")  # build a new model from scratch
-model = YOLO("yolov8n.pt")  # load a pretrained model (recommended for training)
+model = YOLO("yolov8n.pt")  # 加载预训练模型
 # 使用模型
 model.train(data="coco128.yaml", epochs=3)  # train the model
 metrics = model.val()  # evaluate model performance on the validation set
 results = model("https://ultralytics.com/images/bus.jpg")  # predict on an image
-success = model.export(format="onnx")  # export the model to ONNX format
+success = model.export(format="onnx")  # 格式化导出
+
+# 结合httpserver：
+yolo predict model=yolov8s.pt source=http://127.0.0.1:8080/record/2023-05-05/2023-05-05%2020_15_45.avi conf=0.7
+

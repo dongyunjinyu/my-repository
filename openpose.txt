@@ -1,0 +1,29 @@
+记录苏州大学工业互联网全要素互联与协作项目AI微服务部署部分学习过程，以下为本人在本机上部署openpose的过程
+
+git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git
+cd openpose/
+git submodule update --init --recursive --remote
+
+mkdir build/
+cd build/
+cmake-gui ..
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
