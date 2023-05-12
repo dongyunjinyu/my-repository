@@ -1,12 +1,101 @@
 记录苏州大学工业互联网全要素互联与协作项目AI微服务部署部分学习过程，以下为本人在本机上部署openpose的过程
 
+
+
+
+
+apt-get install libgflags-dev
+apt install libgoogle-glog-dev
+apt-get install protobuf-compiler libprotobuf-dev
+apt-get install libopencv-dev
+apt-get install --no-install-recommends libboost-all-dev 
+apt-get install libopenblas-dev
+apt-get install libfreeimage3 libfreeimage-dev
+apt install libhdf5-dev
+apt install libatlas-base-dev
+
+
 git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git
 cd openpose/
 git submodule update --init --recursive --remote
 
+
+
+    CUDA_PIN_LINK=https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+    CUDA_LINK=https://developer.download.nvidia.com/compute/cuda/11.0.3/local_installers/cuda-repo-ubuntu2004-11-0-local_11.0.3-450.51.06-1_amd64.deb
+    echo "wget -c \"$CUDA_PIN_LINK\" ${WGET_VERBOSE}"
+    wget -c "$CUDA_PIN_LINK" ${WGET_VERBOSE}
+    mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    echo "wget \"$CUDA_LINK\" ${WGET_VERBOSE}"
+    wget "$CUDA_LINK" ${WGET_VERBOSE}
+    dpkg -i cuda-repo-ubuntu2004-11-0-local_11.0.3-450.51.06-1_amd64.deb
+    apt-key add /var/cuda-repo-ubuntu2004-11-0-local/7fa2af80.pub
+    apt-get update
+    apt-get -y install cuda
+apt-key add /var/cuda-repo-ubuntu2004-11-0-local/7fa2af80.pub
+apt-get install cuda
+
+
+去nvidia官网下载cudnn,下载的是.deb
+dpkg -i 解包
+cp /var/cudnn-local-repo-*/cudnn-local-*-keyring.gpg /usr/share/keyrings/
+dpkg -i libcudnn8_8.9.1.23-1+cuda11.8_amd64.deb libcudnn8-dev_8.9.1.23-1+cuda11.8_amd64.deb libcudnn8-samples_8.9.1.23-1+cuda11.8_amd64.deb
+cp -r /usr/src/cudnn_samples_v8/ $HOME
+cd  $HOME/cudnn_samples_v8/mnistCUDNN
+
+##############################################
+##############################################
+cd openpose/
 mkdir build/
 cd build/
 cmake-gui ..
+勾选python
+make -j20
+
+
+错误： GPU 3090 算力是 8.6，而当前 CUDA 11.0 不支持算力 8.6。
+解决方案： 把3d*/caffe/camke/和cmake/下的Cuda.cmake文件中的86去掉
+
+
+
+
+
+$$$$ fatal error: caffe/blob.hpp: 没有那个文件或目录:
+把openpose/3rdparty/caffe复制到openpose/include
+
+
+
+$$$$ fatal error: Eigen/Dense: 没有那个文件或目录:
+apt-get install libeigen3-dev
+先确定Eigen3安装在/usr/local/include还是/usr/include
+cd /usr/include
+ln -sf eigen3/Eigen Eigen
+ln -sf eigen3/unsupported unsupported
+
+
+
+unsupported GNU version! gcc versions later than 9 are not supported! 
+解决：
+apt-get -y install gcc-9 g++-9
+rm /usr/bin/gcc
+ln -s /usr/bin/gcc-9 /usr/bin/gcc
+rm /usr/bin/g++
+ln -s /usr/bin/g++-9 /usr/bin/g++
+rm /usr/bin/gcc-ar
+ln -s /usr/bin/gcc-ar-9 /usr/bin/gcc-ar
+rm /usr/bin/gcc-nm
+ln -s /usr/bin/gcc-nm-9 /usr/bin/gcc-nm
+rm /usr/bin/gcc-ranlib
+ln -s /usr/bin/gcc-ranlib-9 /usr/bin/gcc-ranlib
+
+
+
+
+
+
+./build/examples/openpose/openpose.bin --video examples/media/video.avi --face --hand --write_json output_json_folder/
+
+
 
 
 
