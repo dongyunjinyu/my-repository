@@ -1,0 +1,56 @@
+   
+    ##############################     yolov5   #############################
+    parser.add_argument('--optimizer', choices=['SGD', 'Adam', 'AdamW', 'RMSProp'], default='Adam', help='optimizer')
+    # Adam，是AdaGrad（实际是RMSProp）和Momentum的结合，既保留了RMSProp的学习率加权下降，也保留了Momentum先前加权梯度所带来的惯性，速度极快；
+    # SGD为随机梯度下降算法，每下降一步只需用少量样本点参与计算，下降速度快，但收敛精度较低，带动量后，又快又准；
+    # AdamW，即Adam + weight decate，与adam+L2正则化效果相同但计算效率更高
+    # RMSProp算法，是AdaGrad的优化，AdaGrad算法的学习率下降对于先前的学习率参考是没有加权的，这会导致遇到某些地形时没有收敛但学习速率降到很低且一直很低走不动路，RMSProp算法就是加了一个指数加权移动平均，使得太之前的学习率权重降低，解决了AdaGrad的bug
+    # 这些优化器都是基于先前的优化器改进来的：BGD批量梯度下降算法（非常精准但收敛慢）、MBGD小批量梯度下降算法（较精准且收敛也不慢）、AdaGrad算法（学习率随学习时间下降，使得既精准又快速，适用于稀疏数据（效果依赖于特征的布尔值））、Momentum动量梯度下降算法（计算当前的梯度考虑加权后的先前梯度，达到一种惯性的效果，减少震荡的同时加速学习，但由于惯性，可能使当前方向朝着其他地方去然后再朝着全局最优去，绕路了）
+
+    parser.add_argument('--lr0', type=float, default=0.001, help='initial learning rate')
+    parser.add_argument('--decay', type=float, default=5e-5, help='weight decay')
+    optimizer = smart_optimizer(model, opt.optimizer, opt.lr0, momentum=0.9, decay=opt.decay)
+    
+    
+    
+    ##############################     yolov8   #############################
+    def build_optimizer(model, name='Adam', lr=0.001, momentum=0.9, decay=1e-5):
+    """
+    Builds an optimizer with the specified parameters and parameter groups.
+
+    Args:
+        model (nn.Module): model to optimize
+        name (str): name of the optimizer to use
+        lr (float): learning rate
+        momentum (float): momentum
+        decay (float): weight decay
+
+    Returns:
+        optimizer (torch.optim.Optimizer): the built optimizer
+    """
+    g = [], [], []  # optimizer parameter groups
+    bn = tuple(v for k, v in nn.__dict__.items() if 'Norm' in k)  # normalization layers, i.e. BatchNorm2d()
+    for v in model.modules():
+        if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):  # bias (no decay)
+            g[2].append(v.bias)
+        if isinstance(v, bn):  # weight (no decay)
+            g[1].append(v.weight)
+        elif hasattr(v, 'weight') and isinstance(v.weight, nn.Parameter):  # weight (with decay)
+            g[0].append(v.weight)
+
+    if name == 'Adam':
+        optimizer = torch.optim.Adam(g[2], lr=lr, betas=(momentum, 0.999))  # adjust beta1 to momentum
+    elif name == 'AdamW':
+        optimizer = torch.optim.AdamW(g[2], lr=lr, betas=(momentum, 0.999), weight_decay=0.0)
+    elif name == 'RMSProp':
+        optimizer = torch.optim.RMSprop(g[2], lr=lr, momentum=momentum)
+    elif name == 'SGD':
+        optimizer = torch.optim.SGD(g[2], lr=lr, momentum=momentum, nesterov=True)
+    else:
+        raise NotImplementedError(f'Optimizer {name} not implemented.')
+
+    optimizer.add_param_group({'params': g[0], 'weight_decay': decay})  # add g0 with weight_decay
+    optimizer.add_param_group({'params': g[1], 'weight_decay': 0.0})  # add g1 (BatchNorm2d weights)
+    LOGGER.info(f"{colorstr('optimizer:')} {type(optimizer).__name__}(lr={lr}) with parameter groups "
+                f'{len(g[1])} weight(decay=0.0), {len(g[0])} weight(decay={decay}), {len(g[2])} bias')
+    return optimizer
